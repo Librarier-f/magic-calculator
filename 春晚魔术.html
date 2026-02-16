@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>计算器</title>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --btn-gray: #333333;
+            --btn-light-gray: #a5a5a5;
+            --btn-orange: #ff9f0a;
+            --font-main: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            background-color: #1c1c1c;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: var(--font-main);
+        }
+
+        .calculator-prop {
+            background-color: var(--bg-color);
+            width: 375px;
+            height: 750px;
+            padding: 20px;
+            border-radius: 45px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+            position: relative;
+        }
+
+        .display-area {
+            flex: 1;
+            display: flex;
+            position: relative;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 0 20px 20px 20px;
+        }
+
+        .operator-indicator {
+            position: absolute;
+            left: 10px;
+            bottom: 40px;
+            color: var(--btn-orange);
+            font-size: 32px;
+            font-weight: 400;
+            opacity: 0;
+            transition: opacity 0.1s ease;
+        }
+
+        .main-display {
+            color: var(--text-color);
+            font-size: 84px;
+            font-weight: 300;
+            line-height: 1;
+            text-align: right;
+            white-space: nowrap;
+            overflow: hidden;
+            transition: font-size: 0.15s ease;
+            min-height: 84px;
+        }
+
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .btn {
+            aspect-ratio: 1 / 1;
+            border-radius: 50%;
+            border: none;
+            font-size: 34px;
+            font-weight: 400;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.1s, color 0.1s;
+        }
+
+        /* 正常点击效果 */
+        .btn:active { filter: brightness(1.4); }
+
+        /* 锁定状态下的点击效果 - 无反应 */
+        .locked-mode .btn:active { filter: none !important; cursor: default; }
+
+        .btn-num { background-color: var(--btn-gray); color: var(--text-color); }
+        .btn-func { background-color: var(--btn-light-gray); color: black; font-size: 30px; }
+        .btn-op { background-color: var(--btn-orange); color: var(--text-color); font-size: 40px; }
+
+        .op-active {
+            background-color: white !important;
+            color: var(--btn-orange) !important;
+        }
+
+        .btn-zero {
+            grid-column: span 2;
+            aspect-ratio: auto;
+            border-radius: 50px;
+            justify-content: flex-start;
+            padding-left: 35px;
+        }
+
+        .small-font { font-size: 60px; }
+        .x-small-font { font-size: 45px; }
+    </style>
+</head>
+<body>
+
+    <div class="calculator-prop" id="calcContainer">
+        <div class="display-area">
+            <div class="operator-indicator" id="opIndicator">+</div>
+            <div class="main-display" id="display">0</div>
+        </div>
+
+        <div class="keypad">
+            <button class="btn btn-func" id="resetBtn" onclick="reset()">AC</button>
+            <button class="btn btn-func">+/-</button>
+            <button class="btn btn-func">%</button>
+            <button class="btn btn-op">÷</button>
+            
+            <button class="btn btn-num" onclick="pressNum('7')">7</button>
+            <button class="btn btn-num" onclick="pressNum('8')">8</button>
+            <button class="btn btn-num" onclick="pressNum('9')">9</button>
+            <button class="btn btn-op">×</button>
+            
+            <button class="btn btn-num" onclick="pressNum('4')">4</button>
+            <button class="btn btn-num" onclick="pressNum('5')">5</button>
+            <button class="btn btn-num" onclick="pressNum('6')">6</button>
+            <button class="btn btn-op">—</button>
+            
+            <button class="btn btn-num" onclick="pressNum('1')">1</button>
+            <button class="btn btn-num" onclick="pressNum('2')">2</button>
+            <button class="btn btn-num" onclick="pressNum('3')">3</button>
+            <button class="btn btn-op" id="plusBtn" onclick="handlePlus()">+</button>
+            
+            <button class="btn btn-num btn-zero" onclick="pressNum('0')">0</button>
+            <button class="btn btn-num">.</button>
+            <button class="btn btn-op" onclick="handleEquals()">=</button>
+        </div>
+    </div>
+
+<script>
+    let currentInput = "0";
+    let runningTotal = 0;
+    let step = 0; 
+    let isWaitingForNext = false; 
+    let isLocked = false; 
+
+    const calcContainer = document.getElementById('calcContainer');
+
+    function getMagicTime() {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        return parseInt(`${month}${day}${hours}${minutes}`);
+    }
+
+    function updateDisplay(val) {
+        const displayEl = document.getElementById('display');
+        const resetBtn = document.getElementById('resetBtn');
+        displayEl.classList.remove('small-font', 'x-small-font');
+        if (val.length > 6 && val.length <= 9) {
+            displayEl.classList.add('small-font');
+        } else if (val.length > 9) {
+            displayEl.classList.add('x-small-font');
+        }
+        displayEl.innerText = val;
+        resetBtn.innerText = val === "0" ? "AC" : "C";
+    }
+
+    function setLock(state) {
+        isLocked = state;
+        if (state) {
+            calcContainer.classList.add('locked-mode');
+        } else {
+            calcContainer.classList.remove('locked-mode');
+        }
+    }
+
+    function pressNum(num) {
+        if (isLocked) return;
+        if (isWaitingForNext) {
+            currentInput = num;
+            isWaitingForNext = false;
+            document.getElementById('opIndicator').style.opacity = "1";
+        } else {
+            if (currentInput === "0") currentInput = num;
+            else currentInput += num;
+        }
+        updateDisplay(currentInput);
+    }
+
+    function handlePlus() {
+        if (isLocked) return;
+        const plusBtn = document.getElementById('plusBtn');
+        plusBtn.classList.add('op-active');
+
+        if (step === 0) {
+            runningTotal = parseInt(currentInput);
+            isWaitingForNext = true;
+            step = 1;
+        } 
+        else if (step === 2) {
+            // 【核心防误触锁定】按下加号，立即锁定全屏
+            setLock(true);
+            document.getElementById('opIndicator').style.opacity = "1";
+            
+            // 保持当前数字，静默等待3秒
+            setTimeout(() => {
+                const targetTimeValue = getMagicTime();
+                const diff = targetTimeValue - runningTotal;
+                animateMagicTyping(diff.toString());
+            }, 3000);
+        }
+    }
+
+    function animateMagicTyping(numStr) {
+        let i = 0;
+        currentInput = ""; 
+        const interval = setInterval(() => {
+            if (i < numStr.length) {
+                currentInput += numStr[i];
+                updateDisplay(currentInput);
+                highlightButton(numStr[i]);
+                i++;
+            } else {
+                clearInterval(interval);
+                // 【解除锁定】所有数字打完后，恢复等号键操作
+                setLock(false);
+                step = 3; 
+                document.getElementById('plusBtn').classList.add('op-active');
+            }
+        }, 130);
+    }
+
+    function handleEquals() {
+        if (isLocked) return;
+        const opIndicator = document.getElementById('opIndicator');
+        const plusBtn = document.getElementById('plusBtn');
+
+        if (step === 1) {
+            runningTotal += parseInt(currentInput);
+            currentInput = runningTotal.toString();
+            updateDisplay(currentInput);
+            step = 2; 
+            opIndicator.style.opacity = "0";
+            plusBtn.classList.remove('op-active');
+        } 
+        else if (step === 3) {
+            const final = runningTotal + parseInt(currentInput);
+            updateDisplay(final.toString());
+            opIndicator.style.opacity = "0";
+            plusBtn.classList.remove('op-active');
+            step = 0;
+            currentInput = final.toString();
+        }
+    }
+
+    function highlightButton(digit) {
+        const btns = document.querySelectorAll('.btn-num');
+        btns.forEach(b => {
+            if (b.innerText === digit) {
+                b.style.backgroundColor = "#777";
+                setTimeout(() => b.style.backgroundColor = "var(--btn-gray)", 80);
+            }
+        });
+    }
+
+    function reset() {
+        if (isLocked) return;
+        currentInput = "0";
+        runningTotal = 0;
+        step = 0;
+        isWaitingForNext = false;
+        document.getElementById('opIndicator').style.opacity = "0";
+        document.getElementById('plusBtn').classList.remove('op-active');
+        updateDisplay("0");
+    }
+</script>
+</body>
+</html>
